@@ -7,10 +7,9 @@ pub enum TokenKind {
     CloseParen,
     LeftBracket,
     RightBracket,
-    Pointer,
+    Star,
     Comma,
     Semi,
-    EOF,
 }
 
 pub struct Lexer<'a> {
@@ -67,7 +66,7 @@ impl<'a> Lexer<'a> {
                 ']' => Ok(self.next_return_token(TokenKind::RightBracket)),
                 ',' => Ok(self.next_return_token(TokenKind::Comma)),
                 ';' => Ok(self.next_return_token(TokenKind::Semi)),
-                '*' => Ok(self.next_return_token(TokenKind::Pointer)),
+                '*' => Ok(self.next_return_token(TokenKind::Star)),
 
                 c if c.is_numeric() => self.parse_number_token(),
                 c if c.is_alphanumeric() => self.parse_string_token(),
@@ -151,11 +150,11 @@ mod tests {
         let tokens = Lexer::new(obj).tokenize().unwrap();
         let result_tokens = [
             TokenKind::String("char".into()),
-            TokenKind::Pointer,
+            TokenKind::Star,
             TokenKind::String("const".into()),
-            TokenKind::Pointer,
+            TokenKind::Star,
             TokenKind::OpenParen,
-            TokenKind::Pointer,
+            TokenKind::Star,
             TokenKind::String("next".into()),
             TokenKind::CloseParen,
             TokenKind::OpenParen,
@@ -178,9 +177,9 @@ mod tests {
         let result_tokens = [
             TokenKind::String("struct".into()),
             TokenKind::String("a".into()),
-            TokenKind::Pointer,
+            TokenKind::Star,
             TokenKind::OpenParen,
-            TokenKind::Pointer,
+            TokenKind::Star,
             TokenKind::String("c".into()),
             TokenKind::LeftBracket,
             TokenKind::Number(10),
@@ -188,8 +187,8 @@ mod tests {
             TokenKind::CloseParen,
             TokenKind::OpenParen,
             TokenKind::String("int".into()),
-            TokenKind::Pointer,
-            TokenKind::Pointer,
+            TokenKind::Star,
+            TokenKind::Star,
             TokenKind::String("p".into()),
             TokenKind::CloseParen,
             TokenKind::Semi,
