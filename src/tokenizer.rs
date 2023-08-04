@@ -10,6 +10,8 @@ pub enum Token {
     Pointer,
     Array(i64),
     Function(Option<HashMap<Option<String>, Vec<Token>>>),
+    OpenParen,
+    CloseParen,
     Semi,
 }
 
@@ -141,20 +143,23 @@ impl Parser {
 
     pub fn parse(&mut self) -> Result<Vec<Token>, ParserError> {
         let mut result: Vec<Token> = vec![];
+        let mut identifer_flag = false;
         loop {
             let kind = self.peek_expect()?.clone();
             let token = match kind {
                 TokenKind::String(s) => {
                     let token = classify_string(&s);
                     self.next_expect()?;
-                    let kind = self.peek_expect()?;
+                    // let kind = self.peek_expect()?;
                     if token == Token::Identifier(s) {
-                        if *kind == TokenKind::OpenParen {
-                            result.push(token);
-                            self.parse_function()
-                        } else {
-                            Ok(token)
-                        }
+                        identifer_flag = true;
+                        Ok(token)
+                        //  if *kind == TokenKind::OpenParen {
+                        //      result.push(token);
+                        //      self.parse_function()
+                        //  } else {
+                        //      Ok(token)
+                        //  }
                     } else {
                         Ok(token)
                     }
@@ -162,6 +167,18 @@ impl Parser {
                 TokenKind::LeftBracket => {
                     self.next_expect()?;
                     self.parse_array()
+                }
+                TokenKind::OpenParen => {
+                    if identifer_flag {
+                        self.parse_function()
+                    } else {
+                        self.next_expect()?;
+                        Ok(Token::OpenParen)
+                    }
+                }
+                TokenKind::CloseParen => {
+                    self.next_expect()?;
+                    Ok(Token::CloseParen)
                 }
                 TokenKind::Star => {
                     self.next_expect()?;
@@ -350,7 +367,7 @@ mod test {
 
     #[test]
     fn test_tokenize_complex_char_pointer() {
-        let obj = "char * const **next;";
+        let obj = "char * const *(*next)();";
         let tokens = Parser::new(Lexer::new(obj).tokenize().unwrap())
             .parse()
             .unwrap();
@@ -359,8 +376,11 @@ mod test {
             Token::Pointer,
             Token::Qualifier("const".into()),
             Token::Pointer,
+            Token::OpenParen,
             Token::Pointer,
             Token::Identifier("next".into()),
+            Token::CloseParen,
+            Token::Function(None),
             Token::Semi,
         ];
         tokens
