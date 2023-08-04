@@ -145,6 +145,32 @@ mod tests {
     }
 
     #[test]
+    fn test_tokenize_default_main_args() {
+        let obj = "int main(int argc, char** argv)";
+        let tokens = Lexer::new(obj).tokenize().unwrap();
+        let result_tokens = [
+            TokenKind::String("int".into()),
+            TokenKind::String("main".into()),
+            TokenKind::OpenParen,
+            TokenKind::String("int".into()),
+            TokenKind::String("argc".into()),
+            TokenKind::Comma,
+            TokenKind::String("char".into()),
+            TokenKind::Star,
+            TokenKind::Star,
+            TokenKind::String("argv".into()),
+            TokenKind::CloseParen,
+        ];
+        tokens
+            .iter()
+            .zip(result_tokens.iter())
+            .enumerate()
+            .for_each(|(i, (x, y))| {
+                assert_eq!(x, y, "index: {}", i);
+            });
+    }
+
+    #[test]
     fn test_tokenize_complex_char_pointer() {
         let obj = "char * const *(*next)();";
         let tokens = Lexer::new(obj).tokenize().unwrap();

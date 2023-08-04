@@ -1,12 +1,12 @@
-use std::{collections::HashMap, vec};
+use std::collections::HashMap;
 
 use crate::lexer::TokenKind;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Token {
     Identifier(String),
-    Qualifier,
-    Type,
+    Qualifier(String),
+    Type(String),
     Pointer,
     Array(i64),
     Function(Option<HashMap<Option<String>, Vec<Token>>>),
@@ -139,26 +139,39 @@ impl Parser {
         }
     }
 
-    /// `Token`を評価して`Value`に変換する。この関数は再帰的に呼び出される。
     pub fn parse(&mut self) -> Result<Vec<Token>, ParserError> {
         let mut result: Vec<Token> = vec![];
         loop {
             let kind = self.peek_expect()?.clone();
             let token = match kind {
                 TokenKind::String(s) => {
+                    let token = classify_string(&s);
                     self.next_expect()?;
                     let kind = self.peek_expect()?;
-                    if *kind == TokenKind::OpenParen {
-                        self.parse_function()
+                    if token == Token::Identifier(s) {
+                        if *kind == TokenKind::OpenParen {
+                            result.push(token);
+                            self.parse_function()
+                        } else {
+                            Ok(token)
+                        }
                     } else {
-                        Ok(classify_string(s.as_str()))
+                        Ok(token)
                     }
                 }
                 TokenKind::LeftBracket => {
                     self.next_expect()?;
                     self.parse_array()
                 }
-                TokenKind::Semi => Ok(Token::Semi),
+                TokenKind::Star => {
+                    self.next_expect()?;
+                    Ok(Token::Pointer)
+                }
+                TokenKind::Semi => {
+                    self.next_expect()?;
+                    result.push(Token::Semi);
+                    break;
+                }
                 _ => {
                     return Err(ParserError::new(&format!(
                         "error: a token must start string not {:?}",
@@ -169,9 +182,6 @@ impl Parser {
             match token {
                 Ok(t) => result.push(t),
                 Err(_) => break,
-            }
-            if self.kinds.is_empty() {
-                break;
             }
         }
         Ok(result)
@@ -197,26 +207,27 @@ impl Parser {
     }
 }
 
-fn classify_string(kind: &str) -> Token {
-    match kind {
-        "volatile" => return Token::Qualifier,
+fn classify_string(s: &str) -> Token {
+    match s {
+        "volatile" => return Token::Qualifier("volatile".into()),
+        "const" => return Token::Qualifier("const".into()),
 
-        "void" => return Token::Type,
-        "char" => return Token::Type,
-        "signed" => return Token::Type,
-        "unsigned" => return Token::Type,
-        "short" => return Token::Type,
-        "int" => return Token::Type,
-        "long" => return Token::Type,
-        "float" => return Token::Type,
-        "double" => return Token::Type,
-        "struct" => return Token::Type,
-        "union" => return Token::Type,
-        "enum" => return Token::Type,
+        "void" => return Token::Type("void".into()),
+        "char" => return Token::Type("char".into()),
+        "signed" => return Token::Type("signed".into()),
+        "unsigned" => return Token::Type("unsinged".into()),
+        "short" => return Token::Type("short".into()),
+        "int" => return Token::Type("int".into()),
+        "long" => return Token::Type("long".into()),
+        "float" => return Token::Type("float".into()),
+        "double" => return Token::Type("double".into()),
+        "struct" => return Token::Type("struct".into()),
+        "union" => return Token::Type("union".into()),
+        "enum" => return Token::Type("enum".into()),
 
         _ => (),
     }
-    return Token::Identifier(kind.to_string());
+    return Token::Identifier(s.to_string());
 }
 
 #[cfg(test)]
@@ -227,42 +238,134 @@ mod test {
 
     use super::Parser;
 
-    // 無限ループエラーになる。
-    // #[test]
-    // fn test_parse_function() {
-    //     let json = "a(int b, int c);";
-    //     let tokens = Parser::new(Lexer::new(json).tokenize().unwrap())
-    //         .parse()
-    //         .unwrap();
-    //     let mut args = HashMap::new();
-    //     let a: Vec<Token> = vec![Token::Type];
-    //     let b: Vec<Token> = vec![Token::Type];
-    //     args.insert(Some("b".into()), a);
-    //     args.insert(Some("c".into()), b);
-    //     let result: Vec<Token> = vec![
-    //         Token::Identifier("a".into()),
-    //         Token::Function(Some(args)),
-    //         Token::Semi,
-    //     ];
-    //     tokens
-    //         .iter()
-    //         .zip(result.iter())
-    //         .enumerate()
-    //         .for_each(|(i, (x, y))| {
-    //             assert_eq!(x, y, "index: {}", i);
-    //         });
-    // }
-
     #[test]
-    fn test_parse_array() {
-        let array = "a[100]";
-        let tokens = Parser::new(Lexer::new(array).tokenize().unwrap())
+    fn test_parse_empty_function() {
+        let json = "a();";
+        let tokens = Parser::new(Lexer::new(json).tokenize().unwrap())
             .parse()
             .unwrap();
-        let result: Vec<Token> = vec![Token::Identifier("a".into()), Token::Array(100i64)];
+        let result: Vec<Token> = vec![
+            Token::Identifier("a".into()),
+            Token::Function(None),
+            Token::Semi,
+        ];
         tokens
             .iter()
             .zip(result.iter())
+            .enumerate()
+            .for_each(|(i, (x, y))| {
+                assert_eq!(x, y, "index: {}", i);
+            });
+    }
+
+    #[test]
+    fn test_parse_function() {
+        let json = "int main(int argc, char** argv);";
+        let tokens = Parser::new(Lexer::new(json).tokenize().unwrap())
+            .parse()
+            .unwrap();
+        let mut args = HashMap::new();
+        let a: Vec<Token> = vec![Token::Type("int".into())];
+        let b: Vec<Token> = vec![Token::Type("char".into()), Token::Pointer, Token::Pointer];
+        args.insert(Some("argc".into()), a);
+        args.insert(Some("argv".into()), b);
+        let result: Vec<Token> = vec![
+            Token::Type("int".into()),
+            Token::Identifier("main".into()),
+            Token::Function(Some(args)),
+            Token::Semi,
+        ];
+        tokens
+            .iter()
+            .zip(result.iter())
+            .enumerate()
+            .for_each(|(i, (x, y))| {
+                assert_eq!(x, y, "index: {}", i);
+            });
+    }
+
+    #[test]
+    fn test_tokenize_complex_struct_function() {
+        let obj = "struct a **c[10](int **p);";
+        let tokens = Parser::new(Lexer::new(obj).tokenize().unwrap())
+            .parse()
+            .unwrap();
+        let mut args = HashMap::new();
+        let a: Vec<Token> = vec![Token::Type("int".into()), Token::Pointer, Token::Pointer];
+        args.insert(Some("p".into()), a);
+        let result = [
+            Token::Type("struct".into()),
+            Token::Identifier("a".into()),
+            Token::Pointer,
+            Token::Pointer,
+            Token::Identifier("c".into()),
+            Token::Array(10i64),
+            Token::Function(Some(args)),
+            Token::Semi,
+        ];
+        tokens
+            .iter()
+            .zip(result.iter())
+            .enumerate()
+            .for_each(|(i, (x, y))| {
+                assert_eq!(x, y, "index: {}", i);
+            });
+    }
+
+    #[test]
+    fn test_parse_empty_array() {
+        let empty_array = "[];";
+        let tokens = Parser::new(Lexer::new(empty_array).tokenize().unwrap())
+            .parse()
+            .unwrap();
+        let result = vec![Token::Array(i64::MAX), Token::Semi];
+        tokens
+            .iter()
+            .zip(result.iter())
+            .enumerate()
+            .for_each(|(i, (x, y))| {
+                assert_eq!(x, y, "index: {}", i);
+            });
+    }
+
+    #[test]
+    fn test_parse_array() {
+        let array = "a[100];";
+        let tokens = Parser::new(Lexer::new(array).tokenize().unwrap())
+            .parse()
+            .unwrap();
+        let result: Vec<Token> = vec![
+            Token::Identifier("a".into()),
+            Token::Array(100i64),
+            Token::Semi,
+        ];
+        tokens
+            .iter()
+            .zip(result.iter())
+            .enumerate()
+            .for_each(|(i, (x, y))| {
+                assert_eq!(x, y, "index: {}", i);
+            });
+    }
+
+    #[test]
+    fn test_tokenize_complex_char_pointer() {
+        let obj = "char * const **next;";
+        let tokens = Parser::new(Lexer::new(obj).tokenize().unwrap())
+            .parse()
+            .unwrap();
+        let result_tokens = [
+            Token::Type("char".into()),
+            Token::Pointer,
+            Token::Qualifier("const".into()),
+            Token::Pointer,
+            Token::Pointer,
+            Token::Identifier("next".into()),
+            Token::Semi,
+        ];
+        tokens
+            .iter()
+            .zip(result_tokens.iter())
             .enumerate()
             .for_each(|(i, (x, y))| {
                 assert_eq!(x, y, "index: {}", i);
